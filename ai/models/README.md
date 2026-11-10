@@ -1,0 +1,1 @@
+Model weights live in the ignored directory configured by AI_MODEL_CACHE_DIR. From the ai directory, run `uv run --frozen --extra models python -m scripts.download_models text colpali`. Preserve the Hugging Face cache structure when mounting it on another machine. Model IDs, pinned revisions, shapes and precision are described in [model management](../docs/model-management.md).
