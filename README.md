@@ -1,4 +1,69 @@
-# Enterprise Search AI
+# Enterprise Search AI · Folio
+
+Folio lets you upload a PDF, search it by words, meaning or visual content, and open the original page for each match. It works with native text, scanned pages, charts and tables. The browser talks to a local Node gateway; a Python service runs OCR and both embedding models. No hosted API key, Docker, database server or GPU is required for this workspace.
+
+## Run on Windows
+
+Use **64-bit Windows on an Intel or AMD PC** and PowerShell. The locked install uses CPU PyTorch. Allow several GB for the model downloads, plus space for dependencies and indexed PDFs. A short checkout path helps avoid Windows path-length errors.
+
+**1. Install the prerequisites once.** These commands install Git, Node.js LTS (use 22.16 or newer), [uv](https://docs.astral.sh/uv/getting-started/installation/) and [Tesseract OCR](https://tesseract-ocr.github.io/tessdoc/Installation.html):
+
+```powershell
+winget install -e --id Git.Git
+winget install -e --id OpenJS.NodeJS.LTS
+winget install -e --id astral-sh.uv
+winget install -e --id UB-Mannheim.TesseractOCR
+```
+
+**2. Open a fresh PowerShell window.** Clone the repository that contains this README and enter its root. If you are running a pull request before it is merged, clone its source fork and check out its head branch.
+
+```powershell
+git clone https://github.com/Aditya-Coomar/enterprise-search.git
+cd enterprise-search
+```
+
+**3. Set up the project once.** Run the commands below from the repository root. If Tesseract is installed elsewhere, adjust its path. Confirm that `eng` appears in the language list. The config helper creates a private key shared by the gateway and AI service; rerunning it preserves existing settings.
+
+```powershell
+$env:Path = "$env:ProgramFiles\Tesseract-OCR;$env:Path"
+tesseract --list-langs
+node scripts/init-config.mjs
+uv python install 3.11
+uv sync --directory ai --frozen --extra models --python 3.11
+uv run --directory ai --frozen --extra models python -m scripts.download_models text colpali
+npm.cmd ci --prefix api --ignore-scripts
+npm.cmd ci --prefix web
+npm.cmd run build --prefix web
+```
+
+The model download needs internet access on the first run. The checkpoints stay in `ai/model-cache`; after setup, upload and search run locally. If PyTorch reports a missing DLL on Windows, install the [Microsoft Visual C++ x64 runtime](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist).
+
+**4. Start both services.** Each time you want to run the app, open two PowerShell terminals in the repository root and leave both running. In terminal 1 (AI and OCR):
+
+```powershell
+$env:Path = "$env:ProgramFiles\Tesseract-OCR;$env:Path"
+uv run --directory ai --frozen --extra models python -m src.main
+```
+
+In terminal 2 (website and upload gateway):
+
+```powershell
+node api/src/workspace/server.mjs
+```
+
+**Open [the website on port 3108](http://127.0.0.1:3108).** Choose a PDF or open the sample report. Search for “Where are the replacement monitors stored?” to see the scanned log on page 4. Once visual indexing finishes, try “Solar share of electricity by month” in Visual mode to see the chart on page 3. CPU indexing can take a while. The [backend readiness check](http://127.0.0.1:8000/health/ready) and [API docs](http://127.0.0.1:8000/docs) are on port 8000. Press Ctrl+C in each terminal to stop.
+
+**Optional verification:** with both services running, use a third PowerShell window at the repository root:
+
+```powershell
+.\ai\.venv\Scripts\python.exe web/scripts/verify_workspace.py
+```
+
+The check uploads the bundled report, verifies text, hybrid and visual results, checks page previews and session isolation, then deletes its test upload. To share the site temporarily, install [cloudflared](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/) and run `cloudflared tunnel --url http://127.0.0.1:3108` in another terminal. Share the generated HTTPS URL and keep all three processes running.
+
+Uploads, session records, local keys, generated indexes, dependencies and model weights are excluded from Git. The sample report and lockfiles are included. See the [workspace guide](web/README.md) for data retention, the [AI service guide](ai/README.md) for the worker and Docker, and the [verification report](ai/docs/implementation-report.md) for tested environments and optional integrations.
+
+## Platform architecture
 
 AI and document intelligence service for the Enterprise Knowledge Search platform.
 

@@ -16,3 +16,4 @@ redis-setup.js
 
 # Environment Variables
 .env
+.workspace-data/
