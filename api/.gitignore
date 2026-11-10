@@ -1,0 +1,18 @@
+# Node Modules
+node_modules/
+
+# Build output
+dist/
+
+# Logs
+logs/
+npm-debug.log*
+
+# Shell files
+*.sh
+
+# Redis Setup File
+redis-setup.js
+
+# Environment Variables
+.env
