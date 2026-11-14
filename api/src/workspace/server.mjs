@@ -2,6 +2,7 @@ import express from 'express';
 import { createHash, randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { answerQuestion } from './answers.mjs';
 import {
   addDoc,
   checkSpace,
@@ -160,6 +161,20 @@ router.post(
     res.json(
       await search(getDoc(req.tenant, req.params.id), query.trim(), mode),
     );
+  },
+);
+router.post(
+  '/documents/:id/ask',
+  express.json({ limit: '8kb' }),
+  async (req, res) => {
+    const question = req.body?.query;
+    if (typeof question !== 'string' || !question.trim() || question.length > 500)
+      throw fault(400, 'Enter a question of up to 500 characters.');
+    const doc = getDoc(req.tenant, req.params.id);
+    if (!withinLimit('ask:' + req.tenant, 20, 60000))
+      throw fault(429, 'Too many questions. Try again in a minute.');
+    const query = question.trim();
+    res.json(await answerQuestion(query, await search(doc, query, 'text', true)));
   },
 );
 app.use('/workspace-api', router);

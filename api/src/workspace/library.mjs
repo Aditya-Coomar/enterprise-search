@@ -198,6 +198,13 @@ async function indexVisual(d) {
   await checkSpace();
   const m = await processDoc(d, ['visual_embeddings'], [page.page]);
   const ref = m.pages[0]?.artifacts.visual_embeddings;
+  const memoryError = m.pages[0]?.errors.find((error) => error.code === 'insufficient_vram');
+  if (memoryError) {
+    d.visualStatus = 'partial';
+    d.warning = 'Visual indexing paused: ' + memoryError.message;
+    await persist(d);
+    return;
+  }
   if (ref) page.visual = ref;
   else if (
     m.pages[0]?.errors.some((e) => e.retryable) &&
@@ -274,6 +281,7 @@ export async function retry(d) {
     d.status = 'queued';
     d.error = '';
   } else if (d.visualStatus === 'partial') {
+    if (d.warning?.startsWith('Visual indexing paused: ')) d.warning = '';
     for (const p of d.pages) {
       delete p.visualFailed;
       delete p.attempts;
@@ -386,7 +394,7 @@ function score(input) {
     worker.stdin.end(JSON.stringify(input));
   });
 }
-export async function search(d, query, mode) {
+export async function search(d, query, mode, includeEvidence = false) {
   if (d.status !== 'ready')
     throw fault(409, 'Your PDF is still being indexed.');
   if (searches >= 4)
@@ -425,7 +433,7 @@ export async function search(d, query, mode) {
         notes.push('Visual search is busy. Showing available matches.');
       }
     }
-    const results = await score({
+    const ranked = await score({
       root,
       prefix: prefix(d),
       queryPrefix: 'tenant/' + d.tenant + '/queries/derived/',
@@ -434,8 +442,9 @@ export async function search(d, query, mode) {
       mode,
       dense,
       visual,
+      includeEvidence,
     });
-    return { results, notes };
+    return includeEvidence ? { ...ranked, notes } : { results: ranked, notes };
   } finally {
     searches--;
     wake();

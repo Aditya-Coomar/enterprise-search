@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from contextvars import copy_context
 from dataclasses import dataclass, field
+from functools import partial
 from threading import BoundedSemaphore, Lock
 from time import perf_counter
 from typing import Any, Literal
@@ -88,14 +89,38 @@ class Registry:
         try:
             import torch
 
+            quantized = name == "colpali" and self.cfg.colpali_quantization == "nf4"
             device, fallback = select(
-                "cpu" if cpu else slot.requested,
+                "cuda" if quantized else "cpu" if cpu else slot.requested,
                 self.cfg.ai_device,
-                self.cfg.ai_allow_device_fallback,
+                self.cfg.ai_allow_device_fallback and not quantized,
                 torch,
             )
             actual, dtype = precision(device, slot.precision, torch)
             kwargs = {"revision": slot.revision, "local_files_only": self.cfg.ai_offline}
+            if quantized:
+                from transformers import BitsAndBytesConfig
+
+                torch.cuda.empty_cache()
+                free_bytes, _ = torch.cuda.mem_get_info()
+                if free_bytes < 3 * 1024**3:
+                    raise ServiceError(
+                        "insufficient_vram",
+                        f"ColPali needs 3072 MiB of free GPU memory to load. "
+                        f"CUDA reports {free_bytes // 1024**2} MiB free.",
+                        "model_load",
+                        503,
+                    )
+                if self.cfg.colpali_cuda_memory_fraction is not None:
+                    torch.cuda.set_per_process_memory_fraction(self.cfg.colpali_cuda_memory_fraction)
+                actual = "nf4"
+                dtype = torch.float16
+                kwargs["quantization_config"] = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=dtype,
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_use_double_quant=True,
+                )
             model_source = slot.model_id
             if self.cfg.ai_offline:
                 from huggingface_hub import snapshot_download
@@ -121,19 +146,35 @@ class Registry:
                 from colpali_engine.models import ColPali, ColPaliProcessor
 
                 kwargs.update(cache_dir=str(self.cfg.ai_model_cache_dir))
-                processor = ColPaliProcessor.from_pretrained(model_source, **kwargs)
-                model = ColPali.from_pretrained(
+                processor = ColPaliProcessor.from_pretrained(
                     model_source,
-                    torch_dtype=dtype,
-                    device_map={"": device},
-                    attn_implementation="eager",
-                    **kwargs,
+                    revision=slot.revision,
+                    local_files_only=self.cfg.ai_offline,
+                    cache_dir=str(self.cfg.ai_model_cache_dir),
                 )
+                model_options = {
+                    **kwargs,
+                    "torch_dtype": dtype,
+                    "device_map": {"": device},
+                    "attn_implementation": "eager",
+                }
+                if quantized and platform.system() == "Windows":
+                    from transformers import modeling_utils
+
+                    safe_open = modeling_utils.safe_open
+                    modeling_utils.safe_open = partial(safe_open, backend="pread")
+                    try:
+                        model = ColPali.from_pretrained(model_source, **model_options)
+                    finally:
+                        modeling_utils.safe_open = safe_open
+                else:
+                    model = ColPali.from_pretrained(model_source, **model_options)
             slot.model, slot.processor = model.eval(), processor
             slot.device, slot.actual_precision, slot.fallback = device, actual, cpu or fallback
             slot.error, slot.status = None, "ready"
         except Exception as exc:
-            slot.status, slot.error = "failed", type(exc).__name__
+            slot.status = "failed"
+            slot.error = exc.detail["code"] if isinstance(exc, ServiceError) else type(exc).__name__
             raise
         finally:
             slot.load_seconds = perf_counter() - started
@@ -217,6 +258,7 @@ class Registry:
                 if not (
                     accelerator
                     and self.cfg.ai_allow_device_fallback
+                    and not (name == "colpali" and self.cfg.colpali_quantization == "nf4")
                     and (
                         oom
                         or isinstance(exc, NotImplementedError)

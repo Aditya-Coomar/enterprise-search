@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     colpali_revision: str = "c24894ff88e82f6e11d92e89a62572d324969bbc"
     colpali_device: Device = "auto"
     colpali_precision: Literal["fp32", "fp16", "bf16"] = "fp32"
+    colpali_quantization: Literal["none", "nf4"] = "none"
+    colpali_cuda_memory_fraction: float | None = Field(None, gt=0, le=1)
     colpali_max_query_tokens: int = Field(512, ge=16, le=4096)
     colpali_batch_size: int = Field(1, ge=1, le=16)
     ai_max_concurrent_inferences: int = Field(1, ge=1, le=8)

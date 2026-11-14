@@ -19,6 +19,7 @@ export type Hit = {
   signals: string[];
 };
 export type Mode = "hybrid" | "text" | "visual";
+export type Answer = { text: string; pages: number[] };
 export const url = (id: string) => "/workspace-api/documents/" + id;
 export const size = (n: number) =>
   n >= 1e6

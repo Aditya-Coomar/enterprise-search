@@ -11,3 +11,12 @@ Dense output shape is [dimensions]. MiniLM truncates at the model's configured t
 Tensor format v1 is NumPy NPY, C-order, little-endian float32, without pickle. Each artifact includes checksum, byte length, shape, dtype, dimensions, model ID, revision, processor, precision, timings and device. The storage checksum covers the actual NPY bytes. The reader checks checksum, declared shape and type. The benchmark computes reference MaxSim as the sum over query positions of their maximum dot product against page positions. Retrieval owns the production ranking pipeline.
 
 The locked Windows and Linux installs select CPU PyTorch wheels. macOS uses its native wheel with MPS support. For NVIDIA Linux x86-64 build with `docker build --build-arg TORCH_ACCELERATOR=cu128 -t enterprise-search-ai:cuda .`. Install a compatible host driver and NVIDIA Container Toolkit and run with `--gpus all`. Use the same model cache and tensor format. Physical Apple MPS inference was verified with FP32 MiniLM and FP16 ColPali. CUDA and Windows execution need separate target-machine verification.
+
+On Windows x64 with a Pascal NVIDIA GPU, install the CUDA 12.6 wheels and the optional NF4 backend after the requirements install:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install --index-url https://download.pytorch.org/whl/cu126 torch==2.8.0+cu126 torchvision==0.23.0+cu126
+.\.venv\Scripts\python.exe -m pip install bitsandbytes==0.49.0
+```
+
+Set `AI_DEVICE=cuda`, `AI_ALLOW_DEVICE_FALLBACK=false`, `TEXT_EMBEDDING_DEVICE=cuda`, `COLPALI_DEVICE=cuda`, and `COLPALI_QUANTIZATION=nf4` in the local `.env`. Keep lazy loading on and `AI_REQUIRED_MODELS=[]` to start without preloading. NF4 uses FP16 compute on CUDA and fails without falling back to CPU. It checks for at least 3 GiB of free VRAM before loading, and actual headroom depends on the GPU and workload. `COLPALI_CUDA_MEMORY_FRACTION` optionally caps the process's PyTorch CUDA allocator when ColPali loads. Reinstalling the CPU requirements can replace the CUDA wheels, so apply the CUDA install afterward.

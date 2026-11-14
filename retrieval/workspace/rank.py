@@ -11,6 +11,8 @@ from pathlib import Path
 
 import numpy as np
 
+from passages import fallback_chunks, retrieve_passages
+
 
 def tokens(text):
     return re.findall(r"[^\W_]+", text.casefold())
@@ -102,6 +104,7 @@ def rank(job):
     df = {term: sum(counts[term] > 0 for _, _, _, counts in pages) for term in terms}
     average = sum(sum(c.values()) for *_, c in pages) / max(1, len(pages))
     results = []
+    evidence_pages = []
     for item, p, blocks, counts in pages:
         n = p["page_number"]
         length = sum(counts.values())
@@ -126,6 +129,9 @@ def rank(job):
                         / max(1e-9, np.linalg.norm(vec) * np.linalg.norm(q))
                     )
         dense = max(best_by_id.values(), default=None)
+        if job.get("includeEvidence"):
+            evidence_pages.append((n, blocks or fallback_chunks(p["text"]), best_by_id))
+            continue
         vis = None
         if qvis is not None and item.get("visual"):
             ref = item["visual"]
@@ -157,6 +163,8 @@ def rank(job):
                 ),
             }
         )
+    if job.get("includeEvidence"):
+        return retrieve_passages(evidence_pages, terms)
     # Weighted reciprocal rank fusion. Equal scores receive equal ranks.
     features = (
         {"lex": 1.1, "dense": 1.0, "visual": 0.85}

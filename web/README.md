@@ -27,6 +27,10 @@ The interactive website opens at [localhost:3108](http://127.0.0.1:3108). The ga
 
 ## Configuration and checks
 
+To enable **Ask this PDF**, set `OPENROUTER_API_KEY` in `ai/.env` and restart the gateway. The default model is DeepSeek V4 Flash 0731 (`deepseek/deepseek-v4-flash-20260731`). Use `OPENROUTER_MODEL` to select another model with structured output support.
+
+Ask searches the selected PDF's existing section chunks. It retrieves candidates by BM25 and MiniLM cosine similarity, combines the rankings, and reranks passages by semantic score, weighted term coverage and proximity. The context builder adds nearby passages from the same section and sends a bounded set of excerpts with page numbers to OpenRouter. Existing PDFs use their stored chunks and embeddings without being reuploaded. Answers open their cited pages in the reader, and matching pages remain available if OpenRouter is unavailable. Ask sends extracted text, which can omit relationships encoded only in a chart image.
+
 The gateway reads the service configuration from `ai/.env`. Optional overrides are `AI_BASE_URL`, `WORKSPACE_PORT`, `WORKSPACE_STATE` and `RETRIEVAL_PYTHON`. The default retrieval interpreter is the AI virtual environment, which supplies NumPy. Use an absolute `STORAGE_ROOT` or a path relative to `ai/` for both processes. Run a single gateway instance against each state directory.
 
 Run `ai/.venv/bin/python web/scripts/verify_workspace.py` from the monorepo root for the real two-session acceptance test, or pass `--base-url` to test a deployed workspace. The script uploads only the bundled synthetic report and deletes its test document.

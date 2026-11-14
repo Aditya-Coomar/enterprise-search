@@ -69,6 +69,7 @@ class Pipeline:
             "colpali_model_id",
             "colpali_revision",
             "colpali_precision",
+            "colpali_quantization",
             "colpali_device",
             "text_embedding_device",
             "ai_device",

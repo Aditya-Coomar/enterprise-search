@@ -702,6 +702,32 @@ footer > span {
 .search-form .primary {
   min-height: 36px;
 }
+.search-form .secondary {
+  min-height: 36px;
+  white-space: nowrap;
+}
+.document-answer {
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid #bac4da;
+  border-radius: 9px;
+  background: white;
+}
+.document-answer h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+.document-answer p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.answer-pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
 .mode {
   display: flex;
   align-items: center;

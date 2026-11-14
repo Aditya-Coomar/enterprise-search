@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  type Answer,
   type Doc,
   type Hit,
   type Mode,
@@ -53,7 +54,9 @@ export default function Reader({
     [searched, setSearched] = useState(""),
     [hits, setHits] = useState<Hit[]>([]),
     [page, setPage] = useState(1),
-    [loading, setLoading] = useState(false),
+    [loading, setLoading] = useState<"search" | "ask" | null>(null),
+    [answer, setAnswer] = useState<Answer | null>(null),
+    [answerMessage, setAnswerMessage] = useState(""),
     [error, setError] = useState(""),
     [notes, setNotes] = useState<string[]>([]),
     [zoom, setZoom] = useState(false);
@@ -64,28 +67,41 @@ export default function Reader({
     if (zoom) preview.current?.showModal();
     else preview.current?.close();
   }, [zoom]);
-  async function run(term = query, method = mode) {
+  async function run(term = query, method = mode, action: "search" | "ask" = "search") {
     if (!term.trim()) return;
     const turn = ++seq.current;
-    setLoading(true);
+    setLoading(action);
     setError("");
     setNotes([]);
+    setAnswer(null);
+    setAnswerMessage("");
     try {
-      const response = await request<{ results: Hit[]; notes: string[] }>(
-        url(d.id) + "/search",
+      const response = await request<{
+        results: Hit[];
+        notes: string[];
+        answer?: Answer | null;
+        answerError?: string;
+      }>(
+        url(d.id) + "/" + action,
         "POST",
-        { query: term.trim(), mode: method },
+        action === "ask" ? { query: term.trim() } : { query: term.trim(), mode: method },
       );
       if (seq.current === turn) {
         setHits(response.results);
         setSearched(term.trim());
         setNotes(response.notes);
-        if (response.results[0]) setPage(response.results[0].page);
+        if (action === "ask") {
+          setAnswer(response.answer ?? null);
+          if (!response.answer)
+            setAnswerMessage(response.answerError || "I couldn’t find an answer in this document.");
+        }
+        const firstPage = response.answer?.pages[0] ?? response.results[0]?.page;
+        if (firstPage) setPage(firstPage);
       }
     } catch (e) {
       if (seq.current === turn) setError(message(e));
     } finally {
-      if (seq.current === turn) setLoading(false);
+      if (seq.current === turn) setLoading(null);
     }
   }
   async function retry() {
@@ -185,7 +201,7 @@ export default function Reader({
           >
             <Search size={21} />
             <input
-              aria-label="Search this PDF"
+              aria-label="Search or ask about this PDF"
               maxLength={500}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -195,6 +211,7 @@ export default function Reader({
               <select
                 aria-label="Search mode"
                 value={mode}
+                disabled={Boolean(loading)}
                 onChange={(e) => {
                   const m = e.target.value as Mode;
                   setMode(m);
@@ -209,13 +226,22 @@ export default function Reader({
               </select>
               <ChevronDown size={13} />
             </div>
-            <button className="primary" disabled={loading || !query.trim()}>
-              {loading ? (
+            <button className="primary" disabled={Boolean(loading) || !query.trim()}>
+              {loading === "search" ? (
                 <LoaderCircle size={16} className="spin" />
               ) : (
                 <Search size={16} />
               )}{" "}
               Search
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={Boolean(loading) || !query.trim()}
+              onClick={() => void run(query, mode, "ask")}
+            >
+              {loading === "ask" && <LoaderCircle size={16} className="spin" />}
+              Ask this PDF
             </button>
           </form>
           <div className="index-line">
@@ -236,6 +262,26 @@ export default function Reader({
             )}
           </div>
           {d.warning && <p className="notice">{d.warning}</p>}
+          {(answer || answerMessage) && (
+            <section className="document-answer" aria-label="Document answer" aria-live="polite">
+              <h2>Answer</h2>
+              <p>{answer?.text || answerMessage}</p>
+              {answer && (
+                <div className="answer-pages" aria-label="Sources">
+                  {answer.pages.map((sourcePage) => (
+                    <button
+                      key={sourcePage}
+                      type="button"
+                      className="secondary"
+                      onClick={() => setPage(sourcePage)}
+                    >
+                      Page {sourcePage}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
           <div className="reader-grid">
             <section className="matches">
               <div className="panel-head">
@@ -249,7 +295,7 @@ export default function Reader({
               ))}
               {loading && (
                 <p className="notice" role="status">
-                  Searching the document…
+                  {loading === "ask" ? "Finding evidence and generating an answer…" : "Searching the document…"}
                 </p>
               )}
               {!searched ? (
@@ -268,6 +314,7 @@ export default function Reader({
                       ].map((q) => (
                         <button
                           key={q}
+                          disabled={Boolean(loading)}
                           onClick={() => {
                             setQuery(q);
                             void run(q);
