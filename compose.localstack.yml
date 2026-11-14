@@ -1,0 +1,21 @@
+services:
+  localstack:
+    image: localstack/localstack-pro:latest
+    container_name: folio-localstack
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4570:4570"
+      - "127.0.0.1:4600-4649:4600-4649"
+    environment:
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:?Set LOCALSTACK_AUTH_TOKEN in this PowerShell session}
+      MAIN_CONTAINER_NAME: folio-localstack
+      GATEWAY_LISTEN: "0.0.0.0:4570"
+      LOCALSTACK_HOST: "localhost.localstack.cloud:4570"
+      EXTERNAL_SERVICE_PORTS_START: "4600"
+      EXTERNAL_SERVICE_PORTS_END: "4650"
+      PERSISTENCE: "1"
+    volumes:
+      - localstack-data:/var/lib/localstack
+
+volumes:
+  localstack-data:
